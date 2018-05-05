@@ -33,7 +33,7 @@ current version : 1.0.0
 
 ## Authors
 
-* **Guy Amit** - *implementing the myshell.c* - [guyAmit](https://github.com/guyAmit)
+* **Guy Amit** - *implemented the myshell.c* - [guyAmit](https://github.com/guyAmit)
 * **Ben Gurion university of the negev**
 
 ## License
