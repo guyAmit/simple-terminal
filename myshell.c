@@ -11,7 +11,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-
 void redirect_input(cmdLine * p_cmd_line, int * in){
   if(p_cmd_line->inputRedirect!=0){
     *(in)=open(p_cmd_line->inputRedirect,O_RDWR);
@@ -29,25 +28,47 @@ void redirect_output(cmdLine * p_cmd_line, int * out){
 }
 
 void execute_single (cmdLine * p_cmd_line){
-  int pid = fork();
-  if(pid==0){
-    //procsses wotk
-    int out;
-    int in;
-    redirect_output(p_cmd_line,&out);
-    redirect_input(p_cmd_line,&in);
-    if(execvp(p_cmd_line->arguments[0],p_cmd_line->arguments)==-1){
-      perror("error in command");
-      exit(-1);
+  if(strcmp(p_cmd_line->arguments[0],"cd")==0){
+    char current_working_dir[PATH_MAX];
+    getcwd(current_working_dir,PATH_MAX);
+    int i=0;
+    while (current_working_dir[i]!='\0') {
+      i++;
     }
-    else{
-      close(in);
-      close(out);
+    current_working_dir[i]='/';
+    i++;
+    char * fs = p_cmd_line->arguments[1];
+    while(*(fs)){
+      current_working_dir[i]=*(fs++);
+      i++;
+
+    }
+    current_working_dir[i]='\0';
+    if(chdir(current_working_dir)==-1){
+      perror("problem in cd");
     }
   }
   else{
-    if(p_cmd_line->blocking){
-      waitpid(pid,0,WCONTINUED);
+    int pid = fork();
+    if(pid==0){
+      //procsses wotk
+      int out;
+      int in;
+      redirect_output(p_cmd_line,&out);
+      redirect_input(p_cmd_line,&in);
+      if(execvp(p_cmd_line->arguments[0],p_cmd_line->arguments)==-1){
+        perror("error in command");
+        exit(-1);
+      }
+      else{
+        close(in);
+        close(out);
+      }
+    }
+    else{
+      if(p_cmd_line->blocking){
+        waitpid(pid,0,WCONTINUED);
+      }
     }
   }
   freeCmdLines(p_cmd_line);
@@ -110,7 +131,9 @@ int main(int argc, char const *argv[]) {
   int is_quit=1;
   do{
     getcwd(current_working_dir,PATH_MAX);
+    printf("\033[1;32m");
     printf("~%s$: ",current_working_dir);
+    printf("\033[0m");
     fgets(input_string,PATH_MAX,stdin);
     if(strcmp(input_string,"quit\n")==0){
       is_quit=0;
