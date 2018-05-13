@@ -16,6 +16,7 @@ make run
 * **input and output redirection**
 * **all simple terminal commands**
 * **only one pipe**-will get improved in the future
+* **currently does not support chaining of text files for programs**
 
 ## Prerequisites
 
@@ -29,7 +30,7 @@ this file will hopefully get replaced in the future.
 
 ## Versioning
 
-current version : 1.0.0
+current version : 1.0.1
 
 ## Authors
 
