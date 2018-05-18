@@ -53,54 +53,61 @@ int is_special_command(cmdLine * p_cmd_line){
   }
  }
 
-void execute(cmdLine * p_cmd_line,int isPipe){
-  int pipe_fd[2];
-  if(isPipe){
-    pipe(pipe_fd);
-  }
-  int pid_first_child = fork();
-
-  if(pid_first_child==0){
-    //child process work
-    if(isPipe){
-      close(1);
-      dup(pipe_fd[1]);
-      close(pipe_fd[1]);
-      redirect_output(p_cmd_line);
+void execute_helper(cmdLine * p_cmd_line,int * left_pipe, int * right_pipe){
+  int child_pid = fork();
+  if(child_pid==0){
+    if(right_pipe!=0){
+        close(1);
+        dup2(right_pipe[1],1);
+        close(right_pipe[1]);
     }
+    if(left_pipe!=0){
+        close(0);
+        dup2(left_pipe[0],0);
+        close(left_pipe[0]);
+    }
+    redirect_output(p_cmd_line);
     redirect_input(p_cmd_line);
     if(execvp(p_cmd_line->arguments[0],p_cmd_line->arguments)==-1){
       perror("error in first command");
     }
   }
   else{
-    //parent work
-    int pid_second_child=0;
-    if(isPipe){
-      close(pipe_fd[1]);
-      pid_second_child=fork();
-      if(pid_second_child==0){
-        //child work process
-        close(0);
-        dup(pipe_fd[0]);
-        close(pipe_fd[0]);
-        redirect_output(p_cmd_line->next);
-        if(execvp(p_cmd_line->next->arguments[0],p_cmd_line->next->arguments)==-1){
-          perror("error in second command");
-        }
+    if(right_pipe!=0){
+      close(right_pipe[1]);
+    }
+    if(left_pipe!=0){
+      close(left_pipe[0]);
+    }
+    if(p_cmd_line->next){
+      if(p_cmd_line->next->next){
+        int new_pipe[2];
+        pipe(new_pipe);
+        execute_helper(p_cmd_line->next,right_pipe,new_pipe);
       }
       else{
-          //parent work process
-          close(pipe_fd[0]);
-          waitpid(pid_first_child,0,WCONTINUED);
-          waitpid(pid_second_child,0,WCONTINUED);
-        }
-      }
-      else if(p_cmd_line->blocking){
-        waitpid(pid_first_child,0,WCONTINUED);
+        execute_helper(p_cmd_line->next,right_pipe,0);
       }
     }
+    if(p_cmd_line->blocking){
+      waitpid(child_pid,0,WCONTINUED);
+    }
   }
+}
+
+
+
+void execute (cmdLine * p_cmd_line){
+  if(p_cmd_line->next){
+    int right_pipe[2];
+    pipe(right_pipe);
+    execute_helper(p_cmd_line,0,right_pipe);
+  }
+  else{
+    execute_helper(p_cmd_line,0,0);
+  }
+  wait(0);
+}
 
 
 void cd_commad(cmdLine* p_cmd_line){
@@ -142,21 +149,21 @@ int main(int argc, char const *argv[]) {
   int is_special=1;
   do{
     getcwd(current_working_dir,PATH_MAX);
-    printf("\033[1;31m");
+    printf("\033[1;32m");
     printf("%s$ ",current_working_dir);
     printf("\033[0m");
-    if(signal_handler()==1){
+    //if(signal_handler()==1){ //uncomment for signal ditecting
       fgets(input_string,PATH_MAX,stdin);
       cmdLine * line = parseCmdLines(input_string);
       is_special = is_special_command(line);
       if(is_special==REGUALRCOMMAND){
-        execute(line, line->next!=0);
+        execute(line);
       }
       else if(is_special==CDCOMMAD){
         cd_commad(line);
       }
       freeCmdLines(line);
-    }
+  //  } //uncomment for signal ditecting
   }while (is_special!=QUITCOMMAND);
   printf("$\n");
   return 0;

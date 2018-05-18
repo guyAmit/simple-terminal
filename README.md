@@ -15,7 +15,7 @@ make run
 ## Currently Supporting
 * **input and output redirection**
 * **all simple terminal commands**
-* **only one pipe**-will get improved in the future
+* **support unlimited pipe lines**
 * **currently does not support chaining of text files for programs**
 
 ## Prerequisites
