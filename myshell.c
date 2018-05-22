@@ -45,7 +45,7 @@ int redirect_output(cmdLine * p_cmd_line){
 }
 
 int is_special_command(cmdLine * p_cmd_line){
-  if(p_cmd_line == 0){
+  if((p_cmd_line == 0) || (strcmp(p_cmd_line->arguments[0],"\n")==0)){
     return NULLCOMMAND;
   }
   else if(strcmp(p_cmd_line->arguments[0],"quit")==0){
@@ -72,14 +72,16 @@ int is_special_command(cmdLine * p_cmd_line){
 void execute_helper(cmdLine * p_cmd_line,int * left_pipe, int * right_pipe, job * current_job){
   int child_pid = fork();
   if(child_pid==0){
+    signal(SIGTTIN, SIG_DFL);
+    signal(SIGTTOU, SIG_DFL);
+    signal(SIGTSTP, SIG_DFL);
+    signal(SIGQUIT,SIG_DFL);
+    signal(SIGCHLD,SIG_DFL);
 
-    signal(SIGTTIN,SIG_DFL);
-    signal(SIGTTOU,SIG_DFL);
-    signal(SIGTSTP,SIG_DFL);
-
-    int shell_pgid = getpgid(0);
-    setpgid(0,shell_pgid);
-    current_job->pgid = child_pid;
+    if(0 == current_job->pgid){
+        current_job->pgid = getpid();
+    }
+    setpgid(0,current_job->pgid);
 
     if(left_pipe!=0){
         close(0);
@@ -102,9 +104,10 @@ void execute_helper(cmdLine * p_cmd_line,int * left_pipe, int * right_pipe, job 
     }
   }
   else{
-
-    setpgid(0,child_pid);
-    current_job->pgid = child_pid;
+    if(current_job->pgid == 0){
+      current_job->pgid = child_pid;
+    }
+    setpgid(child_pid, current_job->pgid);
 
     if(left_pipe!=0){
       close(left_pipe[0]);
@@ -124,24 +127,36 @@ void execute_helper(cmdLine * p_cmd_line,int * left_pipe, int * right_pipe, job 
         execute_helper(p_cmd_line->next,right_pipe,0,current_job);
       }
     }
-
-    if(p_cmd_line->blocking){
-      waitpid(child_pid,0,WCONTINUED);
-    }
   }
 }
 
 
-void execute (cmdLine * p_cmd_line,job ** job_list,int job_number){
+void execute (cmdLine * p_cmd_line,job ** job_list,int job_number, struct termios * terminal_settings, pid_t shell_pgid ){
   job * current_job = find_job_by_index(*(job_list),job_number);
+  int * start_pipe= 0;
   if(p_cmd_line->next){
-    int start_pipe[2];
+    start_pipe= (int*)malloc(sizeof(int)*2);
     pipe(start_pipe);
-    execute_helper(p_cmd_line,0,start_pipe,current_job);
+  }
+  execute_helper(p_cmd_line,0,start_pipe,current_job);
+  free(start_pipe);
+
+  int blocking=0;
+  cmdLine * line = p_cmd_line;
+  while((line!=0) && (blocking==0)){
+    if(line->blocking){
+      blocking=1;
+     }
+    line=line->next;
+  }
+
+  if(blocking){
+    run_job_in_foreground(job_list,current_job,1,terminal_settings,shell_pgid);
   }
   else{
-    execute_helper(p_cmd_line,0,0,current_job);
+    run_job_in_background(current_job,1);
   }
+
 }
 
 void cd_commad(cmdLine* p_cmd_line){
@@ -164,38 +179,36 @@ void cd_commad(cmdLine* p_cmd_line){
   }
 }
 
-void sig_handler(int sign_num){
-  printf("\n%s was ignored\n",strsignal(sign_num));
-}
 
-int signal_handler(){
-  if((signal(SIGCHLD,sig_handler)!=SIG_ERR) | (signal(SIGQUIT,sig_handler)!=SIG_ERR)){
-      return 1;
-   }
-   else {
-     return -1;
-   }
+void sig_ignore(int signo){
+  printf("sig ctr_z was not ignored\n");
 }
 
 int main(int argc, char const *argv[]) {
 
   //shell initialization
-  signal(SIGTTIN,SIG_IGN);
-  signal(SIGTTOU,SIG_IGN);
+  signal(SIGTTIN, SIG_IGN);
+  signal(SIGTTOU, SIG_IGN);
   signal(SIGTSTP, SIG_IGN);
-  signal_handler();
+  signal(SIGQUIT,SIG_IGN);
+  signal(SIGCHLD,SIG_IGN);
+
   int shell_pgid = getpgid(0);
   setpgid(0,shell_pgid);
   struct termios * terminal_settings = (struct termios*) malloc(sizeof(struct termios));
   tcgetattr(STDIN_FILENO,terminal_settings);  //save and terminal attributes
 
+  //jobs initialization
   job * init =0;
   job ** job_list=&init;
   int job_number = 0;
 
+  //input system initialize
   char input[PATH_MAX];
   char current_working_dir[PATH_MAX];
   int command_type=1;
+
+  //
   do{
     getcwd(current_working_dir,PATH_MAX);
     printf("~%s$: ",current_working_dir);
@@ -204,30 +217,28 @@ int main(int argc, char const *argv[]) {
     command_type = is_special_command(p_cmd_line);
     if(command_type==REGUALRCOMMAND){
       add_job(job_list,input);
-      job_number++;
-      execute(p_cmd_line,job_list,job_number);
-    }
-    else if( command_type==CDCOMMAD){
-      add_job(job_list,input);
-      job_number++;
-      cd_commad(p_cmd_line);
-    }
-    else if(command_type==JOBSCOMMAND){
-      add_job(job_list,input);
-      job_number++;
-      print_jobs(job_list);
-    }
-    else if(command_type==FGCOMMAND){
-      add_job(job_list,input);
-      job_number++;
-      int index_of_job = atoi(p_cmd_line->arguments[1]);
-      job * j = find_job_by_index(*(job_list),index_of_job);
-      run_job_in_foreground(job_list,j,1,terminal_settings,shell_pgid);
-    }
-    else if(command_type==BGCOMMAND){
-
-    }
-
+       job_number++;
+       execute(p_cmd_line,job_list,job_number,terminal_settings,shell_pgid);
+     }
+     else if( command_type==CDCOMMAD){
+       cd_commad(p_cmd_line);
+     }
+     else if(command_type==JOBSCOMMAND){
+       print_jobs(job_list);
+     }
+     else if((command_type==FGCOMMAND) && (p_cmd_line->arguments[1]!=0)) {
+       int index_of_job = atoi(p_cmd_line->arguments[1]);
+       job * j = find_job_by_index(*(job_list),index_of_job);
+       run_job_in_foreground(job_list,j,1,terminal_settings,shell_pgid);
+     }
+     else if((command_type==BGCOMMAND) && (p_cmd_line->arguments[1]!=0)){
+       int index_of_job = atoi(p_cmd_line->arguments[1]);
+       job * j = find_job_by_index(*(job_list),index_of_job);
+       run_job_in_background(j,1);
+     }
+     if(*(job_list)==0){
+       job_number=0;
+     }
 
   }while(command_type!=QUITCOMMAND);
   free_job_list(job_list);

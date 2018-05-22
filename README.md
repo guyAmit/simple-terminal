@@ -1,15 +1,28 @@
 # Simple-terminal
-
-Currently this is a small project for university homework
-I hop that in the future I will continue this project and build
-a "not so simple terminal" from it
+simple terminal that was built as a homework from CASPL course at ben Gurion university
+the terminal act as the real linux terminal. because the subject was very interesting to me
+i decided to improve and expend this project. and over time i hope that i will fully implement
+all the important features of the real linux terminal.
 
 ## Getting Started
 
-Clone the repository, and use the Makefile to run the project
+Clone the repository, and use the Makefile ("make") to compile and run using:
 
 ```
-make run
+./myshell -do not run using make run because it will cause signals not to reach the program
+```
+use the command:
+```
+jobs
+```
+to view all running and suspended(ctr_z) commands.
+suspended command can be re-run using the command:
+```
+fg <command index>
+```
+commands can be moved to the background using the command:
+```
+bg <command index>
 ```
 
 ## Currently Supporting
@@ -34,7 +47,7 @@ current version : 1.0.1
 
 ## Authors
 
-* **Guy Amit** - *implemented the myshell.c* - [guyAmit](https://github.com/guyAmit)
+* **Guy Amit** - [guyAmit](https://github.com/guyAmit)
 * **Ben Gurion university of the negev**
 
 ## License

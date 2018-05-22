@@ -1,6 +1,7 @@
 #include "job_control.h"
 #include <termios.h>
 
+
 /**
 * Receive a pointer to a job list and a new command to add to the job list and adds it to it.
 * Create a new job list if none exists.
@@ -16,7 +17,7 @@ job* add_job(job** job_list, char* cmd){
 		int counter = 2;
 		job* list = *job_list;
 		while (list -> next !=NULL){
-		//	printf("adding %d\n", list->idx);
+			printf("adding %d\n", list->idx);
 			list = list -> next;
 			counter++;
 		}
@@ -46,7 +47,6 @@ void remove_job(job** job_list, job* tmp){
 	}
 	tmp_list -> next = tmp -> next;
 	free_job(tmp);
-
 }
 
 /**
@@ -68,19 +68,23 @@ char* status_to_str(int status)
 void print_jobs(job** job_list){
 
 	job* tmp = *job_list;
-	update_job_list(job_list, FALSE);
-	while (tmp != NULL){
-		printf("[%d]\t %s \t\t %s", tmp->idx, status_to_str(tmp->status),tmp -> cmd);
+	if(tmp !=0){
+		update_job_list(job_list, FALSE);
+		while (tmp != NULL){
+			printf("[%d]\t %s \t\t %s", tmp->idx, status_to_str(tmp->status),tmp -> cmd);
 
-		if (tmp -> cmd[strlen(tmp -> cmd)-1]  != '\n')
-			printf("\n");
-		job* job_to_remove = tmp;
-		tmp = tmp -> next;
-		if (job_to_remove->status == DONE)
-			remove_job(job_list, job_to_remove);
-
+			if (tmp -> cmd[strlen(tmp -> cmd)-1]  != '\n')
+				printf("\n");
+			job* job_to_remove = tmp;
+			tmp = tmp -> next;
+			 if (job_to_remove->status == DONE){
+			 	remove_job(job_list, job_to_remove);
+			}
+		}
 	}
-
+	else{
+		printf("job list is empty\n");
+	}
 }
 
 
@@ -123,8 +127,8 @@ job* initialize_job(char* cmd) {
 	new_job->next=0;
 	new_job->pgid=0;
 	new_job->idx=0;
-	new_job->cmd = (char*)malloc(sizeof(char)*strlen(cmd));
-	strcpy(new_job->cmd,cmd);
+	new_job->cmd = (char*)malloc(sizeof(char)*strlen(cmd)+1);
+	strcpy(new_job->cmd, cmd);
 	return new_job;
 }
 
@@ -158,7 +162,7 @@ void update_job_list(job **job_list, int remove_done_jobs){
 		waitpid(temp->pgid,0,WNOHANG);
 		if((remove_done_jobs) && (temp->status==DONE)){
 			printf("[%d] %s is Done\n",temp->idx,temp->cmd );
-			free_job(temp);
+			remove_job(job_list,temp);
 		}
 		temp=temp->next;
 	}
@@ -182,26 +186,22 @@ void run_job_in_foreground (job** job_list, job *j, int cont, struct termios* sh
     int status =0;
     waitpid(j->pgid,&status,WUNTRACED);
     if(WIFSTOPPED(status)){
-      if(status == SIGTSTP ){
         j->status = SUSPENDED;
-      }
-      else if(status == SIGINT ){
+    }
+    else if(WIFEXITED(status)){
         j->status = DONE;
-      }
-  }
+    }
 
-  tcsetpgrp (STDIN_FILENO, shell_pgid); //move shell to foreground
-  tcgetattr(STDIN_FILENO,j->tmodes);
-  tcsetattr(STDIN_FILENO,TCSADRAIN,shell_tmodes); //reload original terminal_settings
+  	tcsetpgrp (STDIN_FILENO, shell_pgid); //move shell to foreground
+  	tcgetattr(STDIN_FILENO,j->tmodes);
+  	tcsetattr(STDIN_FILENO,TCSADRAIN,shell_tmodes); //reload original terminal_settings
 
-  update_job_list(job_list,1);
+  	update_job_list(job_list,1);
 
-  }
+	}
   else{
-
     printf("[%d]\t %s \t\t %s", j->idx, status_to_str(j->status),j -> cmd);
     remove_job(job_list,j);
-
   }
 }
 
@@ -211,5 +211,10 @@ void run_job_in_foreground (job** job_list, job *j, int cont, struct termios* sh
 **/
 
 void run_job_in_background (job *j, int cont){
-
+	if(cont){
+		j->status=RUNNING;
+		if(kill(-j->pgid,SIGCONT)==-1){
+			perror("error in bg command");
+		}
+	}
 }
