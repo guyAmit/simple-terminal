@@ -158,8 +158,12 @@ job* find_job_by_index(job* job_list, int idx){
 **/
 void update_job_list(job **job_list, int remove_done_jobs){
 	job* temp= *job_list;
+	int status=0;
 	while(temp!=0){
-		waitpid(temp->pgid,0,WNOHANG);
+		waitpid(temp->pgid,&status,WNOHANG);
+		if(WIFEXITED(status)){
+			temp->status=DONE;
+		}
 		if((remove_done_jobs) && (temp->status==DONE)){
 			printf("[%d] %s is Done\n",temp->idx,temp->cmd );
 			remove_job(job_list,temp);
