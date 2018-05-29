@@ -66,15 +66,14 @@ char* status_to_str(int status)
 
 **/
 void print_jobs(job** job_list){
-
 	job* tmp = *job_list;
 	if(tmp !=0){
 		update_job_list(job_list, FALSE);
 		while (tmp != NULL){
 			printf("[%d]\t %s \t\t %s", tmp->idx, status_to_str(tmp->status),tmp -> cmd);
-
-			if (tmp -> cmd[strlen(tmp -> cmd)-1]  != '\n')
+			if (tmp -> cmd[strlen(tmp -> cmd)-1]  != '\n'){
 				printf("\n");
+			}
 			job* job_to_remove = tmp;
 			tmp = tmp -> next;
 			 if (job_to_remove->status == DONE){
@@ -158,11 +157,13 @@ job* find_job_by_index(job* job_list, int idx){
 **/
 void update_job_list(job **job_list, int remove_done_jobs){
 	job* temp= *job_list;
-	int status=0;
 	while(temp!=0){
-		waitpid(temp->pgid,&status,WNOHANG);
-		if(WIFEXITED(status)){
-			temp->status=DONE;
+		if(temp->status == RUNNING){
+			int status=0;
+			waitpid(-temp->pgid,&status,WNOHANG);
+			if(WIFEXITED(status)){
+				 temp->status = DONE;
+		 }
 		}
 		if((remove_done_jobs) && (temp->status==DONE)){
 			printf("[%d] %s is Done\n",temp->idx,temp->cmd );
@@ -178,17 +179,17 @@ void update_job_list(job **job_list, int remove_done_jobs){
 **/
 
 void run_job_in_foreground (job** job_list, job *j, int cont, struct termios* shell_tmodes, pid_t shell_pgid){
-  if(waitpid(j->pgid,0,WNOHANG)!=-1){
+  if(waitpid(-j->pgid,0,WNOHANG)!=-1){
     tcsetpgrp (STDIN_FILENO, j->pgid);
     if( (cont == 1) && (j->status==SUSPENDED)){
       tcsetattr (STDIN_FILENO, TCSADRAIN, j->tmodes);
     }
-    if(kill(j->pgid,SIGCONT)==-1){
+    if(kill(-j->pgid,SIGCONT)==-1){
       perror("sending signal fiald");
     }
 
     int status =0;
-    waitpid(j->pgid,&status,WUNTRACED);
+    waitpid(-j->pgid,&status,WUNTRACED);
     if(WIFSTOPPED(status)){
         j->status = SUSPENDED;
     }

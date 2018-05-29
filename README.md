@@ -52,4 +52,4 @@ current version : 1.0.1
 
 ## License
 
-//ToDo add License
+M.I.T License in separate file 
